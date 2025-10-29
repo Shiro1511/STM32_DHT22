@@ -1,0 +1,32 @@
+# STM32CubeIDE / STM32 project
+
+# Ignore build output
+build/
+Debug/
+Release/
+
+# CubeMX temporary and backup files
+*.launch
+*.log
+*.bak
+*.tmp
+*.temp
+*.swp
+*.d
+*.elf
+*.map
+*.lst
+*.o
+*.dep
+
+# Project user settings
+.settings/
+.vscode/
+*.mxproject
+*.ioc-backup
+
+# CMake build
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+Makef
