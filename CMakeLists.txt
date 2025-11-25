@@ -42,17 +42,22 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined library search paths
 )
 
+file(GLOB MY_LIB_SOURCES
+    "${CMAKE_SOURCE_DIR}/My Library/*.c"
+)
+
 # Add sources to executable
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user sources here
-    "D:/Users/ADMIN/Documents/STM32/DHT22/My Library/DHT22.c"
+    ${MY_LIB_SOURCES}
 )
 
 # Add include paths
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined include paths
-    "D:/Users/ADMIN/Documents/STM32/DHT22/My Library"
+    "${CMAKE_SOURCE_DIR}/My Library"
 )
+
 
 # Add project symbols (macros)
 target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE

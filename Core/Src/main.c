@@ -22,6 +22,10 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "DHT22.h"
+#include "LCD_I2C.h"
+#include "stdio.h"
+#include "stm32f1xx_hal.h"
+#include "stm32f1xx_hal_def.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -40,18 +44,23 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
+I2C_HandleTypeDef hi2c1;
+
 TIM_HandleTypeDef htim1;
 
 /* USER CODE BEGIN PV */
-DHT22_Typedef DHT22_Sensor;
+DHT22_HandleTypeDef dht22_1;
+LCD_HandleTypeDef hlcd;
 
-float temp = 0.0f, humi = 0.0f;
+float temperature = 0.0f, humidity = 0.0f;
+uint32_t last_read = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_TIM1_Init(void);
+static void MX_I2C1_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -91,8 +100,21 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_TIM1_Init();
+  MX_I2C1_Init();
   /* USER CODE BEGIN 2 */
-  DHT22_Init(&DHT22_Sensor, &htim1, GPIOA, GPIO_PIN_0);
+  HAL_StatusTypeDef status = DHT22_Init(&dht22_1, &htim1, GPIOA, GPIO_PIN_0);
+  if (status != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  LCD_Init(&hlcd, &hi2c1, LCD_ADDR);
+  LCD_Clear_Display(&hlcd);
+  LCD_SetCursor(&hlcd, 0, 0);
+  LCD_Print(&hlcd, "DHT22 + LCD");
+  LCD_SetCursor(&hlcd, 0, 1);
+  LCD_Print(&hlcd, "Initialized!");
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -102,10 +124,27 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-    if (DHT22_Read(&DHT22_Sensor))
+    if (HAL_GetTick() - last_read >= 2000)
     {
-      temp = DHT22_Sensor.temperature;
-      humi = DHT22_Sensor.humidity;
+      if (DHT22_Read_Data(&dht22_1, &humidity, &temperature) == HAL_OK)
+      {
+        LCD_Clear_Display(&hlcd);
+        LCD_SetCursor(&hlcd, 0, 0);
+
+        /* Display temperature */
+        char temp_str[16];
+        snprintf(temp_str, sizeof(temp_str), "Temp: %.1f C", temperature);
+        LCD_Print(&hlcd, temp_str);
+
+        LCD_SetCursor(&hlcd, 0, 1);
+
+        /* Display humidity */
+        char hum_str[16];
+        snprintf(hum_str, sizeof(hum_str), "Humidity: %.1f%%", humidity);
+        LCD_Print(&hlcd, hum_str);
+      }
+
+      last_read = HAL_GetTick();
     }
   }
   /* USER CODE END 3 */
@@ -147,6 +186,39 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
+}
+
+/**
+ * @brief I2C1 Initialization Function
+ * @param None
+ * @retval None
+ */
+static void MX_I2C1_Init(void)
+{
+
+  /* USER CODE BEGIN I2C1_Init 0 */
+
+  /* USER CODE END I2C1_Init 0 */
+
+  /* USER CODE BEGIN I2C1_Init 1 */
+
+  /* USER CODE END I2C1_Init 1 */
+  hi2c1.Instance = I2C1;
+  hi2c1.Init.ClockSpeed = 100000;
+  hi2c1.Init.DutyCycle = I2C_DUTYCYCLE_2;
+  hi2c1.Init.OwnAddress1 = 0;
+  hi2c1.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
+  hi2c1.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
+  hi2c1.Init.OwnAddress2 = 0;
+  hi2c1.Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
+  hi2c1.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
+  if (HAL_I2C_Init(&hi2c1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN I2C1_Init 2 */
+
+  /* USER CODE END I2C1_Init 2 */
 }
 
 /**
@@ -209,6 +281,7 @@ static void MX_GPIO_Init(void)
   /* GPIO Ports Clock Enable */
   __HAL_RCC_GPIOD_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
+  __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_0, GPIO_PIN_RESET);
