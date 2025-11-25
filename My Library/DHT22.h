@@ -1,61 +1,71 @@
+/**
+ ******************************************************************************
+ * @file           : DHT22.h
+ * @brief          : Header file for DHT22 temperature and humidity sensor.
+ *                   Provides functions to initialize, read temperature and
+ *                   humidity data from DHT22 sensor via single-wire interface.
+ ******************************************************************************
+ * @attention
+ *
+ * This module allows reading temperature and humidity data from DHT22 sensor
+ * using a GPIO pin and hardware timer for precise timing. It supports data
+ * validation through checksum and handles the sensor's communication protocol.
+ *
+ * Example usage:
+ * @code
+ *   DHT22_HandleTypeDef dht22;
+ *   DHT22_Init(&dht22, &htim2, GPIOA, GPIO_PIN_0);
+ *
+ *   float temperature, humidity;
+ *   if (DHT22_Read_Data(&dht22, &humidity, &temperature) == HAL_OK) {
+ *       // Data read successfully
+ *   }
+ * @endcode
+ *
+ ******************************************************************************
+ */
+
 #ifndef _DHT22_H_
 #define _DHT22_H_
 
 #include "stm32f1xx_hal.h"
 
+/* -------------------------------------------------------------------------- */
+/*                            DHT22 Handle Struct                             */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * @brief  DHT22 handle structure definition
+ */
 typedef struct
 {
-    /* DHT22 Pin Connection*/
-    TIM_HandleTypeDef *htim;
-    GPIO_TypeDef *dataPort;
-    uint16_t dataPin;
+    TIM_HandleTypeDef *htim; /*!< Pointer to timer handler for microsecond delays */
+    GPIO_TypeDef *dataPort;  /*!< Pointer to GPIO port for data pin */
+    uint16_t dataPin;        /*!< GPIO pin for data communication */
+} DHT22_HandleTypeDef;
 
-    /*DHT22's measured value */
-    float temperature;
-    float humidity;
-} DHT22_Typedef;
-
-/**
- * @brief Initialize DHT22 sensor structure with hardware parameters
- * @param DHT22x: Pointer to DHT22 structure instance
- * @param htim: Pointer to timer handle for timing operations
- * @param dataPort: GPIO port for data pin
- * @param dataPin: GPIO pin for data communication
- */
-void DHT22_Init(DHT22_Typedef *DHT22x, TIM_HandleTypeDef *htim, GPIO_TypeDef *dataPort, uint16_t dataPin);
+/* -------------------------------------------------------------------------- */
+/*                            Function Prototypes                             */
+/* -------------------------------------------------------------------------- */
 
 /**
- * @brief Read temperature and humidity data from DHT22 sensor
- * @param DHT22x: Pointer to DHT22 structure instance
- * @return Operation status: 0 = success, 1 = error
+ * @brief  Initialize the DHT22 sensor.
+ * @param  dht22x: Pointer to DHT22 handle structure.
+ * @param  htim: Pointer to timer handler for precise timing.
+ * @param  dataPort: Pointer to GPIO port for data pin.
+ * @param  dataPin: GPIO pin number for data communication.
+ * @retval HAL status
  */
-uint8_t DHT22_Read(DHT22_Typedef *DHT22x);
+HAL_StatusTypeDef DHT22_Init(DHT22_HandleTypeDef *dht22x, TIM_HandleTypeDef *htim,
+                             GPIO_TypeDef *dataPort, uint16_t dataPin);
 
 /**
- * @brief Send start signal to DHT22 sensor to initiate communication
- * @param DHT22x: Pointer to DHT22 structure instance
+ * @brief  Read temperature and humidity data from DHT22 sensor.
+ * @param  dht22x: Pointer to DHT22 handle structure.
+ * @param  humidity: Pointer to store humidity value (percentage).
+ * @param  temperature: Pointer to store temperature value (Celsius).
+ * @retval HAL status (HAL_OK if successful, HAL_ERROR if checksum fails or no response)
  */
-void DHT22_Start(DHT22_Typedef *DHT22x);
-
-/**
- * @brief Check sensor response after start signal
- * @param DHT22x: Pointer to DHT22 structure instance
- * @return Response status: 0 = valid response, 1 = no response or error
- */
-uint8_t DHT22_CheckResponse(DHT22_Typedef *DHT22x);
-
-/**
- * @brief Read single bit from DHT22 sensor
- * @param DHT22x: Pointer to DHT22 structure instance
- * @return Bit value: 0 or 1
- */
-uint8_t DHT22_ReadBit(DHT22_Typedef *DHT22x);
-
-/**
- * @brief Read one byte (8 bits) from DHT22 sensor
- * @param DHT22x: Pointer to DHT22 structure instance
- * @return Byte value read from sensor
- */
-uint8_t DHT22_ReadByte(DHT22_Typedef *DHT22x);
+HAL_StatusTypeDef DHT22_Read_Data(DHT22_HandleTypeDef *dht22x, float *humidity, float *temperature);
 
 #endif /* _DHT22_H_ */

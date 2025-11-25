@@ -1,143 +1,155 @@
 #include "DHT22.h"
 
-void delayMicroseconds(TIM_HandleTypeDef *htim, uint16_t us)
+static void delayMicroSeconds(DHT22_HandleTypeDef *dht22x, uint16_t us)
 {
-    // htim->Instance->CNT = 0;
-    __HAL_TIM_SET_COUNTER(htim, 0);
-    HAL_TIM_Base_Start(htim);
-    while (__HAL_TIM_GET_COUNTER(htim) < us)
+    __HAL_TIM_SET_COUNTER(dht22x->htim, 0);
+    HAL_TIM_Base_Start(dht22x->htim);
+    while (__HAL_TIM_GET_COUNTER(dht22x->htim) < us)
         ;
-    HAL_TIM_Base_Stop(htim);
+    HAL_TIM_Base_Stop(dht22x->htim);
 }
 
-uint8_t DHT22_CheckResponse(DHT22_Typedef *DHT22x)
+static void delayMilliSeconds(DHT22_HandleTypeDef *dht22x, uint16_t ms)
 {
-    uint8_t response = 0;
-
-    delayMicroseconds(DHT22x->htim, 40);
-    if (!(HAL_GPIO_ReadPin(DHT22x->dataPort, DHT22x->dataPin)))
+    for (uint16_t i = 0; i < ms; i++)
     {
-        delayMicroseconds(DHT22x->htim, 80);
-        if (HAL_GPIO_ReadPin(DHT22x->dataPort, DHT22x->dataPin))
-        {
-            response = 1;
-        }
-        else
-        {
-            response = 0;
-        }
+        delayMicroSeconds(dht22x, 1000);
+    }
+}
+
+static void DHT22_Start(DHT22_HandleTypeDef *dht22x)
+{
+    /* First, Pin configuration is OUTPUT */
+    GPIO_InitTypeDef GPIO_InitStruct = {0};
+    GPIO_InitStruct.Pin = dht22x->dataPin;
+    GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+    GPIO_InitStruct.Pull = GPIO_NOPULL;
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+    HAL_GPIO_Init(dht22x->dataPort, &GPIO_InitStruct);
+
+    /* Pull the DATA pin down for at least 1 -> 10ms */
+    HAL_GPIO_WritePin(dht22x->dataPort, dht22x->dataPin, GPIO_PIN_RESET);
+    delayMilliSeconds(dht22x, 2);
+
+    /* Pull the DATA pin up and wait 20 - 40us */
+    HAL_GPIO_WritePin(dht22x->dataPort, dht22x->dataPin, GPIO_PIN_SET);
+    delayMicroSeconds(dht22x, 30);
+
+    /* Then, Pin configuration is INPUT*/
+    GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+    GPIO_InitStruct.Pull = GPIO_PULLUP;
+    HAL_GPIO_Init(dht22x->dataPort, &GPIO_InitStruct);
+}
+
+static HAL_StatusTypeDef DHT22_CheckResponse(DHT22_HandleTypeDef *dht22x)
+{
+    /* Wait 40us after sending start signal */
+    delayMicroSeconds(dht22x, 40);
+
+    /* DHT22 should pull low for 80us */
+    if (HAL_GPIO_ReadPin(dht22x->dataPort, dht22x->dataPin))
+    {
+        return HAL_ERROR; /* No response */
     }
 
-    while (HAL_GPIO_ReadPin(DHT22x->dataPort, DHT22x->dataPin))
-        ; // Wait for the pin to go low
+    delayMicroSeconds(dht22x, 80);
 
-    return response;
+    /* DHT22 should pull high for 80us */
+    if (!HAL_GPIO_ReadPin(dht22x->dataPort, dht22x->dataPin))
+    {
+        return HAL_ERROR; /* Invalid response */
+    }
+
+    while (HAL_GPIO_ReadPin(dht22x->dataPort, dht22x->dataPin))
+        ;
+
+    return HAL_OK;
 }
 
-uint8_t DHT22_ReadBit(DHT22_Typedef *DHT22x)
+static uint8_t DHT22_ReadBit(DHT22_HandleTypeDef *dht22x)
 {
     uint8_t bit_value = 0;
 
-    while (!(HAL_GPIO_ReadPin(DHT22x->dataPort, DHT22x->dataPin)))
+    while (!(HAL_GPIO_ReadPin(dht22x->dataPort, dht22x->dataPin)))
         ;
 
-    delayMicroseconds(DHT22x->htim, 40);
+    delayMicroSeconds(dht22x, 50);
 
-    if (HAL_GPIO_ReadPin(DHT22x->dataPort, DHT22x->dataPin))
+    if (HAL_GPIO_ReadPin(dht22x->dataPort, dht22x->dataPin))
+    {
         bit_value = 1;
+    }
     else
+    {
         bit_value = 0;
+    }
 
-    while (HAL_GPIO_ReadPin(DHT22x->dataPort, DHT22x->dataPin))
+    while (HAL_GPIO_ReadPin(dht22x->dataPort, dht22x->dataPin))
         ;
 
     return bit_value;
 }
 
-uint8_t DHT22_ReadByte(DHT22_Typedef *DHT22x)
+static uint8_t DHT22_ReadByte(DHT22_HandleTypeDef *dht22x)
 {
     uint8_t byte = 0;
     for (uint8_t i = 0; i < 8; i++)
     {
         byte <<= 1;
-        byte |= DHT22_ReadBit(DHT22x);
+        byte |= DHT22_ReadBit(dht22x);
     }
     return byte;
 }
 
-uint8_t DHT22_Read(DHT22_Typedef *DHT22x)
+HAL_StatusTypeDef DHT22_Read_Data(DHT22_HandleTypeDef *dht22x, float *humidity, float *temperature)
 {
     uint8_t data[5] = {0};
-    uint8_t presence = 0;
-    int16_t temperature, humidity;
+    int16_t raw_humi, raw_temp;
+    HAL_StatusTypeDef status;
 
-    DHT22_Start(DHT22x);
+    DHT22_Start(dht22x);
 
-    presence = DHT22_CheckResponse(DHT22x);
-
-    if (presence)
+    status = DHT22_CheckResponse(dht22x);
+    if (status != HAL_OK)
     {
-        data[0] = DHT22_ReadByte(DHT22x); // Humidity high byte
-        data[1] = DHT22_ReadByte(DHT22x); // Humidity low byte
-        data[2] = DHT22_ReadByte(DHT22x); // Temperature high byte
-        data[3] = DHT22_ReadByte(DHT22x); // Temperature low byte
-        data[4] = DHT22_ReadByte(DHT22x); // Checksum
+        return status;
     }
 
-    if (data[4] == (uint8_t)(data[0] + data[1] + data[2] + data[3]))
+    data[0] = DHT22_ReadByte(dht22x); /* Humidity high byte */
+    data[1] = DHT22_ReadByte(dht22x); /* Humidity low byte */
+    data[2] = DHT22_ReadByte(dht22x); /* Temperature high byte */
+    data[3] = DHT22_ReadByte(dht22x); /* Temperature low byte */
+    data[4] = DHT22_ReadByte(dht22x); /* Checksum */
+
+    if (data[4] != (uint8_t)(data[0] + data[1] + data[2] + data[3]))
     {
-        humidity = (data[0] << 8) | data[1];
-        temperature = (data[2] << 8) | data[3];
-
-        if (temperature & 0x8000)
-        {
-            temperature = -(temperature & 0x7FFF);
-        }
-
-        DHT22x->humidity = humidity / 10.0f;
-        DHT22x->temperature = temperature / 10.0f;
-
-        return 1; // Success
+        return HAL_ERROR;
     }
 
-    DHT22x->humidity = 0.0f;
-    DHT22x->temperature = 0.0f;
+    raw_humi = (data[0] << 8) | data[1];
+    raw_temp = (data[2] << 8) | data[3];
 
-    return 0; // Failure
+    if (raw_temp & 0x8000)
+    {
+        raw_temp = -(raw_temp & 0x7FFF);
+    }
+
+    *humidity = raw_humi / 10.0f;
+    *temperature = raw_temp / 10.0f;
+
+    return HAL_OK;
 }
 
-void DHT22_Start(DHT22_Typedef *DHT22x)
+HAL_StatusTypeDef DHT22_Init(DHT22_HandleTypeDef *dht22x, TIM_HandleTypeDef *htim, GPIO_TypeDef *dataPort, uint16_t dataPin)
 {
-    /* Pin configuration is OUTPUT */
-    GPIO_InitTypeDef GPIO_InitStruct = {0};
-    GPIO_InitStruct.Pin = DHT22x->dataPin;
-    GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-    GPIO_InitStruct.Pull = GPIO_NOPULL;
-    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-    HAL_GPIO_Init(DHT22x->dataPort, &GPIO_InitStruct);
+    if (dht22x == NULL || htim == NULL)
+    {
+        return HAL_ERROR;
+    }
 
-    /* Pull the DATA pin down for at least 1ms */
-    HAL_GPIO_WritePin(DHT22x->dataPort, DHT22x->dataPin, GPIO_PIN_RESET);
-    delayMicroseconds(DHT22x->htim, 1500);
+    dht22x->htim = htim;
+    dht22x->dataPort = dataPort;
+    dht22x->dataPin = dataPin;
 
-    /* Pull the DATA pin up for 30us */
-    HAL_GPIO_WritePin(DHT22x->dataPort, DHT22x->dataPin, GPIO_PIN_SET);
-    delayMicroseconds(DHT22x->htim, 30);
-
-    /* Pin configuration is INPUT */
-    GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-    GPIO_InitStruct.Pull = GPIO_PULLUP;
-    HAL_GPIO_Init(DHT22x->dataPort, &GPIO_InitStruct);
-}
-
-void DHT22_Init(DHT22_Typedef *DHT22x, TIM_HandleTypeDef *htim, GPIO_TypeDef *dataPort, uint16_t dataPin)
-{
-    if (DHT22x == NULL)
-        return;
-
-    DHT22x->htim = htim;
-    DHT22x->dataPort = dataPort;
-    DHT22x->dataPin = dataPin;
-    DHT22x->humidity = 0.0f;
-    DHT22x->temperature = 0.0f;
+    return HAL_OK;
 }
